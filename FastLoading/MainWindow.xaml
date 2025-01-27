@@ -9,13 +9,11 @@
 
     <Grid x:Name="gMainGrid" Background="#FFF9F9F9">
         <DockPanel>
-            <StackPanel DockPanel.Dock="Top" Margin="10,10,10,0" Width="300" Height="Auto">
+            <StackPanel DockPanel.Dock="Top" Margin="10,10,10,10" Width="300" Height="Auto">
                 <DockPanel Margin="0,3,2,0" LastChildFill="False">
                     <CheckBox x:Name="cbFastLoading" DockPanel.Dock="Left" Margin="0,0,0,0" Height="25" FontSize="14 px" VerticalContentAlignment="Center" Content="Fast loading screen" ToolTip="Enable fast loading screen" IsChecked="True" Checked="CbFastLoading_Check_Handler" Unchecked="CbFastLoading_Check_Handler" TabIndex="34"  />
                 </DockPanel>
                 <StackPanel Margin="0,5,0,0" Orientation="Horizontal"/>
-                <Button x:Name="bPatch" Margin="0,7,0,0" Width="300" Height="30" FontSize="14 px" IsEnabled="False" Content="Patch game (CTRL + P)" BorderThickness="1" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" 
-                    Focusable="False" Click="BPatch_Click" TabIndex="20" IsTabStop="False" />
                 <TextBox x:Name="tbStatus" Margin="0,5,0,0" Width="300" Height="25" FontSize="14 px" FontWeight="Bold" Text="waiting for game..." TextAlignment="Center" TextWrapping="NoWrap" IsEnabled="False" />
             </StackPanel>
         </DockPanel>

@@ -7,6 +7,7 @@ namespace FastLoading
         internal const string PROCESS_NAME = "sekiro";
         internal const string PROCESS_TITLE = "Sekiro";
         internal const string PROCESS_DESCRIPTION = "Shadows Die Twice";
+        internal const string PROCESS_DESCRIPTION2 = "Sekiro™: Shadows Die Twice";
         internal const string PROCESS_EXE_VERSION = "1.6.0.0";
         internal static readonly string[] PROCESS_EXE_VERSION_SUPPORTED_LEGACY = new string[4]
         {

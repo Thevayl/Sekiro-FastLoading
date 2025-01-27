@@ -191,11 +191,15 @@ namespace FastLoading
             for (int i = 0; i < procList.Length; i++)
             {
                 if (procList[i].MainWindowTitle != GameData.PROCESS_TITLE || !procList[i].MainModule.FileVersionInfo.FileDescription.Contains(GameData.PROCESS_DESCRIPTION))
-                    continue;
+                {
+                    if(!(procList[i].MainModule.FileVersionInfo.FileDescription == GameData.PROCESS_DESCRIPTION2)) // Compatibility fix?
+                        continue;
+                }
+                    
                 gameIndex = i;
                 break;
             }
-            if (gameIndex < 0)
+            if (gameIndex < 0) // No valid game process found
             {
                 UpdateStatus("no valid game process found...", Brushes.Red);
                 LogToFile("no valid game process found...");
@@ -351,7 +355,6 @@ namespace FastLoading
                 this.cbFastLoading.IsEnabled = false;
             }
 
-            this.bPatch.IsEnabled = true;
             _running = true;
             PatchGame();
         }
@@ -551,11 +554,6 @@ namespace FastLoading
                 if (IsNumericInput(text)) e.CancelCommand();
             }
             else e.CancelCommand();
-        }
-
-        private void BPatch_Click(object sender, RoutedEventArgs e)
-        {
-            PatchGame();
         }
 
         private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
