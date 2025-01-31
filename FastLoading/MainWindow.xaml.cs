@@ -41,7 +41,7 @@ namespace FastLoading
         internal bool _statLoggingEnabled = false;
         internal bool _initialStartup = true;
         internal bool _debugMode = false;
-        internal RECT _windowRect;
+        //internal RECT _windowRect;
         internal bool _isLegacyVersion = false;
         internal bool _inQuietMode = false;
         internal static string _path_logs;
@@ -52,16 +52,19 @@ namespace FastLoading
          * Thevayl's mod
          */
         internal long _offset_is_in_loading = 0x0;
-        internal CancellationTokenSource FLST_cts = new CancellationTokenSource();
         internal readonly DispatcherTimer _dispatcherTimerGameStillAlive = new DispatcherTimer();
-        internal CancellationToken FLST_token;
-        internal Task FLST_thread = null;
+        internal readonly BackgroundWorker _FastLS_worker = new BackgroundWorker();
+        private volatile bool _FastLS_worker_running = false;
+        private static AutoResetEvent resetEvent = new AutoResetEvent(false);
 
         public MainWindow(bool quietMode)
         {
             _path_logs = Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location) + @"\FastLoading.log";
             InitializeComponent();
-            FLST_token = FLST_cts.Token;
+
+            _FastLS_worker.WorkerSupportsCancellation = true;
+            _FastLS_worker.DoWork += new DoWorkEventHandler(FastLoadingWorker);
+            _FastLS_worker.RunWorkerCompleted += new RunWorkerCompletedEventHandler(FastLoadingWorkerFinish);
             if (quietMode)
             {
                 _inQuietMode = true;
@@ -135,9 +138,13 @@ namespace FastLoading
             IntPtr hWnd = new WindowInteropHelper(this).Handle;
             if (_gameAccessHwnd != IntPtr.Zero)
                 CloseHandle(_gameAccessHwnd);
-            if (FLST_thread != null)
-                FLST_cts.Cancel();
 
+            if (_FastLS_worker_running)
+            {
+                _FastLS_worker.CancelAsync();
+                resetEvent.WaitOne();
+            }
+            
             LogToFile("FastLoading stopped");
         }
 
@@ -352,7 +359,10 @@ namespace FastLoading
             {
                 UpdateStatus("loading screen check not found...", Brushes.Red);
                 LogToFile("could not find loading offset...");
-                this.cbFastLoading.IsEnabled = false;
+            }
+            else
+            {
+                cbFastLoading.IsEnabled = true;
             }
 
             _running = true;
@@ -577,66 +587,64 @@ namespace FastLoading
                 return false;
             }
 
-            float previous_deltaTime = (1000f/60)/1000f;
             if (this.cbFastLoading.IsChecked == true)
             {
                 // Create and start a thread to check for loading screen
-                FLST_thread = Task.Run(() =>
-                {
-                    try
-                    {
-                        bool patched = false;
-
-                        while (!FLST_token.IsCancellationRequested)
-                        {
-
-                            bool isLoading = Read<int>(_gameAccessHwndStatic, _offset_is_in_loading).Equals(GameData.IS_IN_LOADING_TRUE);
-                            //LogToFile("Thread FastLoading\n\tLoading:"+isLoading + "\n\t_offset_is_in_loading="+ _offset_is_in_loading.ToString("X") + "\n\tvalue:" + Read<int>(_gameAccessHwndStatic, _offset_is_in_loading));
-                            if (isLoading && !patched)
-                            {
-                                patched = true;
-                                float deltaTime = 1f / 1000f;
-                                float speedFix = GameData.FindSpeedFixForRefreshRate(1000);
-                                Debug.WriteLine("Deltatime hex: " + GetHexRepresentationFromFloat(deltaTime));
-                                Debug.WriteLine("Speed hex: " + GetHexRepresentationFromFloat(speedFix));
-
-                                previous_deltaTime = Read<float>(_gameAccessHwndStatic, _offset_framelock);
-                                Debug.WriteLine("previous_deltaTime: " + previous_deltaTime + " Hex=" + GetHexRepresentationFromFloat(previous_deltaTime));
-                                WriteBytes(_gameAccessHwndStatic, _offset_framelock, BitConverter.GetBytes(deltaTime));
-                                _memoryCaveGenerator.UpdateDataCaveValueByName(_DATACAVE_SPEEDFIX_POINTER, BitConverter.GetBytes(speedFix));
-                                _memoryCaveGenerator.ActivateDataCaveByName(_DATACAVE_SPEEDFIX_POINTER);
-                            }
-                            if (!isLoading && patched)
-                            {
-                                patched = false;
-                                WriteBytes(_gameAccessHwndStatic, _offset_framelock, BitConverter.GetBytes(previous_deltaTime));
-                                _memoryCaveGenerator.DeactivateDataCaveByName(_DATACAVE_SPEEDFIX_POINTER);
-                            }
-                            Thread.Sleep(100); // wait
-                        }
-                    }
-                    catch (ThreadInterruptedException)
-                    {
-                        LogToFile("Thread FastLoading interrupted!");
-                        Console.WriteLine("Thread FastLoading interrupted!");
-                    }
-                });
+                _FastLS_worker.RunWorkerAsync();
 
             }
-            else if (this.cbFastLoading.IsChecked == false)
+            else if (this.cbFastLoading.IsChecked == false && _FastLS_worker.IsBusy)
             {
+                this.cbFastLoading.IsEnabled = false;
                 // Request cancellation
-                if (FLST_thread != null)
-                {
-                    FLST_cts.Cancel();
-                    FLST_cts = new CancellationTokenSource();
-                    FLST_token = FLST_cts.Token;
-                    FLST_thread = null;
-                }
+                _FastLS_worker.CancelAsync();
             }
 
             if (showStatus) UpdateStatus(DateTime.Now.ToString("HH:mm:ss") + " Game patched!", Brushes.Green);
             return true;
+        }
+
+        private void FastLoadingWorker(object sender, DoWorkEventArgs doWorkEventArgs)
+        {
+            Debug.WriteLine("FastLoadingWorker started");
+            _FastLS_worker_running = true;
+            bool patched = false;
+            float previous_deltaTime = (1000f / 60) / 1000f;
+            while (!_FastLS_worker.CancellationPending)
+            {
+
+                bool isLoading = Read<int>(_gameAccessHwndStatic, _offset_is_in_loading).Equals(GameData.IS_IN_LOADING_TRUE);
+                //LogToFile("Thread FastLoading\n\tLoading:"+isLoading + "\n\t_offset_is_in_loading="+ _offset_is_in_loading.ToString("X") + "\n\tvalue:" + Read<int>(_gameAccessHwndStatic, _offset_is_in_loading));
+                if (isLoading && !patched)
+                {
+                    patched = true;
+                    float deltaTime = 1f / 1000f;
+                    float speedFix = GameData.FindSpeedFixForRefreshRate(1000);
+                    Debug.WriteLine("Deltatime hex: " + GetHexRepresentationFromFloat(deltaTime));
+                    Debug.WriteLine("Speed hex: " + GetHexRepresentationFromFloat(speedFix));
+
+                    previous_deltaTime = Read<float>(_gameAccessHwndStatic, _offset_framelock);
+                    Debug.WriteLine("previous_deltaTime: " + previous_deltaTime + " Hex=" + GetHexRepresentationFromFloat(previous_deltaTime));
+                    WriteBytes(_gameAccessHwndStatic, _offset_framelock, BitConverter.GetBytes(deltaTime));
+                    _memoryCaveGenerator.UpdateDataCaveValueByName(_DATACAVE_SPEEDFIX_POINTER, BitConverter.GetBytes(speedFix));
+                    _memoryCaveGenerator.ActivateDataCaveByName(_DATACAVE_SPEEDFIX_POINTER);
+                }
+                if (!isLoading && patched)
+                {
+                    patched = false;
+                    WriteBytes(_gameAccessHwndStatic, _offset_framelock, BitConverter.GetBytes(previous_deltaTime));
+                    _memoryCaveGenerator.DeactivateDataCaveByName(_DATACAVE_SPEEDFIX_POINTER);
+                }
+                Thread.Sleep(100); // wait
+            }
+            doWorkEventArgs.Cancel = true;
+            resetEvent.Set();
+        }
+        private void FastLoadingWorkerFinish(object sender, RunWorkerCompletedEventArgs runWorkerCompletedEventArgs)
+        {
+            this.cbFastLoading.IsEnabled = true;
+            _FastLS_worker_running = false;
+            Debug.WriteLine("FastLoadingWorker canceled");
         }
 
         #region WINAPI
